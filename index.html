@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reaction Time Tap Speed Test</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background:#f8fafc; font-family:'Inter',system-ui,sans-serif; }
+  .circle { border-radius:50%; cursor:pointer; user-select:none; transition:background 0.1s; }
+  .circle-ready { background:#94a3b8; }
+  .circle-wait { background:#ef4444; box-shadow:0 0 40px #ef444480; }
+  .circle-go { background:#22c55e; box-shadow:0 0 60px #22c55e80; animation:pulse 0.3s infinite alternate; }
+  .circle-done { background:#6366f1; }
+  @keyframes pulse { from {transform:scale(1);} to {transform:scale(1.04);} }
+  .bar { background:#e2e8f0; border-radius:4px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:4px; transition:width 0.4s; }
+  .history-item { background:#f1f5f9; border-left:4px solid #6366f1; }
+  .tab-active { background:#6366f1; color:#fff; }
+  .tab-inactive { background:#e2e8f0; color:#475569; }
+  .circle-choice-green { background:#22c55e; box-shadow:0 0 40px #22c55e80; cursor:pointer; }
+  .circle-choice-red { background:#ef4444; cursor:pointer; }
+  .choice-correct { background:#22c55e!important; animation:bounce 0.3s; }
+  .choice-wrong { background:#ef4444!important; }
+  @keyframes bounce { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
+</style>
+</head>
+<body class="min-h-screen bg-gray-50 flex flex-col items-center py-8 px-4">
+  <div class="w-full max-w-lg">
+    <h1 class="text-2xl font-bold text-gray-800 text-center mb-1">⚡ Reaction Time Test</h1>
+    <p class="text-gray-500 text-sm text-center mb-6">5 trials per session — test your reflexes!</p>
+
+    <!-- Mode Tabs -->
+    <div class="flex gap-2 mb-6" role="tablist">
+      <button onclick="setMode('simple')" id="tabSimple" class="tab-active flex-1 py-2 rounded-lg text-sm font-semibold" role="tab" aria-selected="true">Simple</button>
+      <button onclick="setMode('choice')" id="tabChoice" class="tab-inactive flex-1 py-2 rounded-lg text-sm font-semibold" role="tab" aria-selected="false">Choice Reaction</button>
+    </div>
+
+    <!-- SIMPLE MODE -->
+    <div id="modeSimple">
+      <div class="flex justify-center mb-6">
+        <div id="mainCircle" class="circle circle-ready w-56 h-56 flex items-center justify-center text-white text-center text-xl font-bold select-none"
+          onclick="handleTap()" role="button" tabindex="0" aria-label="Reaction circle, click on green"
+          onkeydown="if(event.key==='Enter'||event.key===' ')handleTap()">
+          <span id="circleLabel">Click to Start</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHOICE MODE -->
+    <div id="modeChoice" class="hidden">
+      <p class="text-center text-gray-500 text-sm mb-4">Tap only the <span class="text-green-600 font-bold">GREEN</span> circle!</p>
+      <div class="flex justify-center gap-8 mb-6">
+        <div id="choiceLeft" class="circle w-32 h-32 flex items-center justify-center text-white font-bold text-sm"
+          onclick="handleChoiceTap('left')" role="button" tabindex="0" aria-label="Left circle"
+          onkeydown="if(event.key==='Enter')handleChoiceTap('left')"></div>
+        <div id="choiceRight" class="circle w-32 h-32 flex items-center justify-center text-white font-bold text-sm"
+          onclick="handleChoiceTap('right')" role="button" tabindex="0" aria-label="Right circle"
+          onkeydown="if(event.key==='Enter')handleChoiceTap('right')"></div>
+      </div>
+      <div class="text-center">
+        <button onclick="startChoiceSession()" id="choiceStartBtn" class="px-6 py-2 rounded-lg font-semibold text-white" style="background:#6366f1">Start Choice Test</button>
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div id="statusMsg" class="text-center text-lg font-semibold text-gray-600 mb-4 min-h-8"></div>
+
+    <!-- Trial indicators -->
+    <div class="flex justify-center gap-3 mb-6">
+      <div id="t0" class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold">1</div>
+      <div id="t1" class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold">2</div>
+      <div id="t2" class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold">3</div>
+      <div id="t3" class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold">4</div>
+      <div id="t4" class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold">5</div>
+    </div>
+
+    <!-- Results -->
+    <div id="resultsPanel" class="hidden bg-white rounded-2xl shadow p-6 mb-6">
+      <h2 class="text-lg font-bold text-gray-800 mb-4">Session Results</h2>
+      <div id="trialList" class="space-y-2 mb-4"></div>
+      <div class="grid grid-cols-2 gap-4 mb-4">
+        <div class="bg-indigo-50 rounded-xl p-3 text-center">
+          <div class="text-2xl font-bold text-indigo-600" id="resMean">—</div>
+          <div class="text-xs text-gray-500">Mean (ms)</div>
+        </div>
+        <div class="bg-purple-50 rounded-xl p-3 text-center">
+          <div class="text-2xl font-bold text-purple-600" id="resStd">—</div>
+          <div class="text-xs text-gray-500">Std Dev (ms)</div>
+        </div>
+      </div>
+      <div id="percentileBar" class="mb-4 p-3 rounded-xl text-center font-semibold text-white" style="background:#6366f1"></div>
+      <div id="pbBadge" class="text-center text-sm text-yellow-600 font-semibold mb-4"></div>
+      <button onclick="resetSession()" class="w-full py-2 rounded-lg font-semibold text-white" style="background:#6366f1">Try Again</button>
+    </div>
+
+    <!-- Personal Best -->
+    <div class="bg-white rounded-2xl shadow p-4 mb-4">
+      <div class="flex justify-between items-center">
+        <span class="text-sm font-semibold text-gray-600">🏆 Personal Best</span>
+        <span id="pbDisplay" class="text-lg font-bold text-indigo-600">—</span>
+      </div>
+    </div>
+
+    <!-- Session History Chart -->
+    <div id="historySection" class="bg-white rounded-2xl shadow p-4">
+      <h3 class="text-sm font-semibold text-gray-600 mb-3">Session History (Mean ms)</h3>
+      <canvas id="histChart" width="400" height="100" aria-label="Session history chart"></canvas>
+      <p id="histEmpty" class="text-xs text-gray-400 text-center py-4">Complete sessions to see history.</p>
+    </div>
+  </div>
+
+<script>
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+const TRIALS = 5;
+let mode = 'simple';
+let state = 'idle'; // idle, waiting, go, done
+let waitTimer = null;
+let goTime = null;
+let results = [];
+let falsestarts = 0;
+
+let stored = JSON.parse(localStorage.getItem('reactionData') || 'null') || { pb: null, history: [] };
+
+function saveStored() { localStorage.setItem('reactionData', JSON.stringify(stored)); }
+
+// Update PB display
+function updatePBDisplay() {
+  document.getElementById('pbDisplay').textContent = stored.pb ? stored.pb + ' ms' : '—';
+}
+updatePBDisplay();
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('tabSimple').className = (m === 'simple' ? 'tab-active' : 'tab-inactive') + ' flex-1 py-2 rounded-lg text-sm font-semibold';
+  document.getElementById('tabChoice').className = (m === 'choice' ? 'tab-active' : 'tab-inactive') + ' flex-1 py-2 rounded-lg text-sm font-semibold';
+  document.getElementById('modeSimple').classList.toggle('hidden', m !== 'simple');
+  document.getElementById('modeChoice').classList.toggle('hidden', m !== 'choice');
+  document.getElementById('resultsPanel').classList.add('hidden');
+  resetSession();
+}
+
+// --- SIMPLE MODE ---
+function handleTap() {
+  if (mode !== 'simple') return;
+  if (state === 'idle') {
+    startWaiting();
+  } else if (state === 'waiting') {
+    falseStart();
+  } else if (state === 'go') {
+    recordReaction();
+  }
+}
+
+function startWaiting() {
+  state = 'waiting';
+  const circle = document.getElementById('mainCircle');
+  circle.className = 'circle circle-wait w-56 h-56 flex items-center justify-center text-white text-center text-xl font-bold select-none';
+  document.getElementById('circleLabel').textContent = "Don't tap yet!";
+  setStatus('Wait for green...');
+  const delay = 1000 + Math.random() * 3000;
+  waitTimer = setTimeout(() => {
+    state = 'go';
+    circle.className = 'circle circle-go w-56 h-56 flex items-center justify-center text-white text-center text-xl font-bold select-none';
+    document.getElementById('circleLabel').textContent = 'TAP NOW!';
+    goTime = performance.now();
+  }, delay);
+}
+
+function falseStart() {
+  clearTimeout(waitTimer);
+  state = 'idle';
+  falsestarts++;
+  const circle = document.getElementById('mainCircle');
+  circle.className = 'circle circle-ready w-56 h-56 flex items-center justify-center text-white text-center text-xl font-bold select-none';
+  document.getElementById('circleLabel').textContent = 'Click to Start';
+  setStatus('⚠️ False Start! Penalty added. Try again.');
+  results.push({ ms: null, false: true });
+  markTrial(results.length - 1, 'false');
+  if (results.length >= TRIALS) { showResults(); return; }
+}
+
+function recordReaction() {
+  const ms = Math.round(performance.now() - goTime);
+  state = 'idle';
+  const circle = document.getElementById('mainCircle');
+  circle.className = 'circle circle-done w-56 h-56 flex items-center justify-center text-white text-center text-xl font-bold select-none';
+  document.getElementById('circleLabel').textContent = ms + ' ms';
+  setStatus(getPercentileLabel(ms));
+  results.push({ ms, false: false });
+  markTrial(results.length - 1, 'done', ms);
+  if (results.length >= TRIALS) {
+    setTimeout(showResults, 800);
+  } else {
+    setTimeout(() => {
+      circle.className = 'circle circle-ready w-56 h-56 flex items-center justify-center text-white text-center text-xl font-bold select-none';
+      document.getElementById('circleLabel').textContent = 'Click to Start';
+      setStatus('');
+      state = 'idle';
+    }, 900);
+  }
+}
+
+function markTrial(i, type, ms) {
+  const el = document.getElementById('t' + i);
+  if (!el) return;
+  if (type === 'done') { el.style.background = '#22c55e'; el.style.color = '#fff'; el.textContent = ms + ''; }
+  else if (type === 'false') { el.style.background = '#ef4444'; el.style.color = '#fff'; el.textContent = 'F'; }
+}
+
+function getPercentileLabel(ms) {
+  if (ms < 150) return '🌟 Exceptional (<150ms)';
+  if (ms < 200) return '⚡ Excellent (<200ms)';
+  if (ms < 250) return '✅ Good (<250ms)';
+  if (ms < 300) return '👍 Average (<300ms)';
+  return '🐢 Slow (>300ms)';
+}
+function getPercentileColor(ms) {
+  if (ms < 150) return '#7c3aed';
+  if (ms < 200) return '#2563eb';
+  if (ms < 250) return '#16a34a';
+  if (ms < 300) return '#d97706';
+  return '#dc2626';
+}
+
+function showResults() {
+  const valid = results.filter(r => !r.false).map(r => r.ms);
+  const falsec = results.filter(r => r.false).length;
+  let mean = null, std = null;
+  if (valid.length > 0) {
+    mean = Math.round(valid.reduce((a,b) => a+b, 0) / valid.length);
+    std = valid.length > 1 ? Math.round(Math.sqrt(valid.reduce((s,v) => s + (v-mean)**2, 0) / valid.length)) : 0;
+  }
+
+  document.getElementById('resultsPanel').classList.remove('hidden');
+  const list = document.getElementById('trialList');
+  list.innerHTML = results.map((r, i) => {
+    if (r.false) return `<div class="history-item rounded p-2 flex justify-between text-sm" style="border-left-color:#ef4444"><span>Trial ${i+1}</span><span class="text-red-500 font-semibold">False Start</span></div>`;
+    return `<div class="history-item rounded p-2 flex justify-between text-sm"><span>Trial ${i+1}</span><span class="font-semibold text-indigo-700">${escapeHtml(String(r.ms))} ms</span></div>`;
+  }).join('');
+
+  document.getElementById('resMean').textContent = mean !== null ? mean + ' ms' : '—';
+  document.getElementById('resStd').textContent = std !== null ? '±' + std : '—';
+
+  const pEl = document.getElementById('percentileBar');
+  if (mean !== null) {
+    pEl.textContent = getPercentileLabel(mean);
+    pEl.style.background = getPercentileColor(mean);
+  } else {
+    pEl.textContent = 'All false starts!';
+    pEl.style.background = '#ef4444';
+  }
+
+  // PB
+  const pbEl = document.getElementById('pbBadge');
+  if (mean !== null) {
+    if (!stored.pb || mean < stored.pb) {
+      stored.pb = mean;
+      pbEl.innerHTML = '🏆 New Personal Best: ' + escapeHtml(String(mean)) + ' ms!';
+      updatePBDisplay();
+    } else {
+      pbEl.textContent = '';
+    }
+    stored.history.push(mean);
+    if (stored.history.length > 20) stored.history.shift();
+    saveStored();
+    drawHistChart();
+  }
+  falsestarts = 0;
+}
+
+function resetSession() {
+  results = [];
+  state = 'idle';
+  falsestarts = 0;
+  clearTimeout(waitTimer);
+  const circle = document.getElementById('mainCircle');
+  circle.className = 'circle circle-ready w-56 h-56 flex items-center justify-center text-white text-center text-xl font-bold select-none';
+  document.getElementById('circleLabel').textContent = 'Click to Start';
+  setStatus('');
+  document.getElementById('resultsPanel').classList.add('hidden');
+  for (let i = 0; i < TRIALS; i++) {
+    const el = document.getElementById('t' + i);
+    el.style.background = '#e2e8f0';
+    el.style.color = '#475569';
+    el.textContent = i + 1;
+  }
+}
+
+function setStatus(msg) { document.getElementById('statusMsg').textContent = msg; }
+
+// --- CHOICE MODE ---
+let choiceState = 'idle', choiceGo = null, choiceResults = [], choiceTarget = null;
+
+function startChoiceSession() {
+  choiceResults = [];
+  document.getElementById('choiceStartBtn').textContent = 'Running...';
+  document.getElementById('choiceStartBtn').disabled = true;
+  nextChoiceTrial();
+}
+
+function nextChoiceTrial() {
+  if (choiceResults.length >= TRIALS) { showChoiceResults(); return; }
+  const L = document.getElementById('choiceLeft');
+  const R = document.getElementById('choiceRight');
+  L.className = 'circle w-32 h-32 flex items-center justify-center text-white font-bold text-sm';
+  R.className = 'circle w-32 h-32 flex items-center justify-center text-white font-bold text-sm';
+  L.style.background = '#94a3b8'; R.style.background = '#94a3b8';
+  setStatus('Get ready...');
+  choiceState = 'waiting';
+  const delay = 1000 + Math.random() * 2000;
+  setTimeout(() => {
+    choiceTarget = Math.random() < 0.5 ? 'left' : 'right';
+    const greenEl = choiceTarget === 'left' ? L : R;
+    const redEl = choiceTarget === 'left' ? R : L;
+    greenEl.style.background = '#22c55e';
+    greenEl.style.boxShadow = '0 0 40px #22c55e80';
+    redEl.style.background = '#ef4444';
+    choiceGo = performance.now();
+    choiceState = 'go';
+    setStatus('Tap the GREEN circle!');
+  }, delay);
+}
+
+function handleChoiceTap(side) {
+  if (choiceState !== 'go') return;
+  const ms = Math.round(performance.now() - choiceGo);
+  const correct = side === choiceTarget;
+  choiceResults.push({ ms, correct });
+  choiceState = 'result';
+  setStatus(correct ? `✅ Correct! ${ms}ms` : `❌ Wrong circle! +300ms penalty`);
+  setTimeout(nextChoiceTrial, 900);
+}
+
+function showChoiceResults() {
+  const valid = choiceResults.map(r => r.correct ? r.ms : r.ms + 300);
+  const mean = Math.round(valid.reduce((a,b)=>a+b,0)/valid.length);
+  setStatus(`Choice mean: ${mean}ms (${choiceResults.filter(r=>r.correct).length}/${TRIALS} correct)`);
+  document.getElementById('choiceStartBtn').textContent = 'Start Choice Test';
+  document.getElementById('choiceStartBtn').disabled = false;
+  choiceState = 'idle';
+  choiceResults = [];
+}
+
+// --- HISTORY CHART ---
+function drawHistChart() {
+  const canvas = document.getElementById('histChart');
+  const ctx = canvas.getContext('2d');
+  const data = stored.history;
+  document.getElementById('histEmpty').classList.toggle('hidden', data.length > 0);
+  if (data.length === 0) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const min = Math.min(...data) - 20;
+  const max = Math.max(...data) + 20;
+  const W = canvas.width, H = canvas.height - 20;
+  const step = W / Math.max(data.length - 1, 1);
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i * step;
+    const y = H - ((v - min) / (max - min)) * H;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#6366f1';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  data.forEach((v, i) => {
+    const x = i * step;
+    const y = H - ((v - min) / (max - min)) * H;
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI*2);
+    ctx.fillStyle = '#6366f1';
+    ctx.fill();
+    ctx.fillStyle = '#475569';
+    ctx.font = '10px sans-serif';
+    ctx.fillText(v, x - 10, y - 6);
+  });
+}
+drawHistChart();
+</script>
+</body>
+</html>
